@@ -3159,19 +3159,23 @@ static void cqspi_mem_do_calibration(struct spi_mem *mem,
 		return;
 	}
 
+    dev_warn(dev, "cqspi_mem_do_calibration function - before cqspi_phy_check_pattern\n");
 	ret = cqspi_phy_check_pattern(f_pdata, mem);
 	if (ret) {
 		dev_warn(dev, "Pattern not found. Skipping calibration.\n");
 		return;
 	}
 
+    dev_warn(dev, "cqspi_mem_do_calibration function - before cqspi_phy_op_eligible_sdr\n");
 	if (cqspi_phy_op_eligible_ddr(op)) {
+        dev_warn(dev, "cqspi_mem_do_calibration function - inside eligible_ddr\n");
 		f_pdata->use_dqs = true;
 
 		cqspi_phy_pre_config(cqspi, 0, 1, f_pdata);
 		ret = cqspi_phy_calibrate_ddr(f_pdata, mem);
 
 	} else if (cqspi_phy_op_eligible_sdr(op)) {
+        dev_warn(dev, "cqspi_mem_do_calibration function - inside eligible_sdr\n");
 		f_pdata->use_dqs = false;
 
 		cqspi_phy_pre_config(cqspi, 1, 0, f_pdata);
