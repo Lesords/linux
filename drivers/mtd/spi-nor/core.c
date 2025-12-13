@@ -117,6 +117,18 @@ void spi_nor_spimem_setup_op(const struct spi_nor *nor,
 		op->cmd.opcode = (op->cmd.opcode << 8) | ext;
 		op->cmd.nbytes = 2;
 	}
+
+    // dev_err(nor->dev, "[debug] - %s function - op->cmd.buswidth = %d\n", __func__, op->cmd.buswidth);
+    // dev_err(nor->dev, "[debug] - %s function - op->addr.buswidth = %d\n", __func__, op->addr.buswidth);
+    // dev_err(nor->dev, "[debug] - %s function - op->dummy.buswidth = %d\n", __func__, op->dummy.buswidth);
+    // dev_err(nor->dev, "[debug] - %s function - op->data.buswidth = %d\n", __func__, op->data.buswidth);
+    // dev_err(nor->dev, "[debug] - %s function - op->cmd.dtr = %d\n", __func__, op->cmd.dtr);
+    // dev_err(nor->dev, "[debug] - %s function - op->addr.dtr = %d\n", __func__, op->addr.dtr);
+    // dev_err(nor->dev, "[debug] - %s function - op->dummy.dtr = %d\n", __func__, op->dummy.dtr);
+    // dev_err(nor->dev, "[debug] - %s function - op->data.dtr = %d\n", __func__, op->data.dtr);
+    // dev_err(nor->dev, "[debug] - %s function - op->dummy.nbytes = %d\n", __func__, op->dummy.nbytes);
+    // dev_err(nor->dev, "[debug] - %s function - op->cmd.opcode = %d\n", __func__, op->cmd.opcode);
+    // dev_err(nor->dev, "[debug] - %s function - op->cmd.nbytes = %d\n", __func__, op->cmd.nbytes);
 }
 
 /**
@@ -2264,25 +2276,43 @@ static const struct flash_info *spi_nor_detect(struct spi_nor *nor)
 	u8 *id = nor->bouncebuf;
 	int ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_read_id\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - nor->reg_proto: %d, SNOR_PROTO_1_1_1: %d, SNOR_PROTO_8_8_8_DTR: %d\n",
+            __func__, __LINE__, nor->reg_proto, SNOR_PROTO_1_1_1, SNOR_PROTO_8_8_8_DTR);
 	ret = spi_nor_read_id(nor, 0, 0, id, nor->reg_proto);
 	if (ret) {
-		dev_dbg(nor->dev, "error %d reading JEDEC ID\n", ret);
+		dev_err(nor->dev, "[debug] - error %d reading JEDEC ID\n", ret);
 		return ERR_PTR(ret);
 	}
 
 	/* Cache the complete flash ID. */
 	nor->id = devm_kmemdup(nor->dev, id, SPI_NOR_MAX_ID_LEN, GFP_KERNEL);
-	if (!nor->id)
-		return ERR_PTR(-ENOMEM);
+    if (!nor->id) {
+		dev_err(nor->dev, "[debug] - (%s)::[%d] - error %d devm_kmemdup\n", __func__, __LINE__, ret);
+        return ERR_PTR(-ENOMEM);
+    }
 
 	info = spi_nor_match_id(nor, id);
 
 	/* Fallback to a generic flash described only by its SFDP data. */
 	if (!info) {
+        dev_err(nor->dev, "[debug] - info is null\n");
 		ret = spi_nor_check_sfdp_signature(nor);
-		if (!ret)
+        if (!ret) {
+            dev_err(nor->dev, "[debug] - using spi_nor_generic_flash\n");
 			info = &spi_nor_generic_flash;
-	}
+        }
+    } else {
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - info is not null\n", __func__, __LINE__);
+    }
+
+    int i;
+    for (i = 0; i < SPI_NOR_MAX_ID_LEN; i++) {
+        dev_err(nor->dev, "[debug] - id[%d] = %02x\n", i, id[i]);
+    }
+
+    dev_err(nor->dev, "[debug] - JEDEC id bytes: %*ph\n",
+            SPI_NOR_MAX_ID_LEN, id);
 
 	if (!info) {
 		dev_err(nor->dev, "unrecognized JEDEC id bytes: %*ph\n",
@@ -2673,6 +2703,7 @@ static int spi_nor_check(struct spi_nor *nor)
 	     !nor->controller_ops->write ||
 	     !nor->controller_ops->read_reg ||
 	     !nor->controller_ops->write_reg))) {
+		dev_err(nor->dev, "spi-nor: please fill all the necessary fields!\n");
 		pr_err("spi-nor: please fill all the necessary fields!\n");
 		return -EINVAL;
 	}
@@ -3313,6 +3344,8 @@ static void spi_nor_no_sfdp_init_params(struct spi_nor *nor)
 	}
 
 	if (no_sfdp_flags & SPI_NOR_QUAD_READ) {
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - SPI_NOR_QUAD_READ\n", __func__, __LINE__);
+
 		params->hwcaps.mask |= SNOR_HWCAPS_READ_1_1_4;
 		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_1_4],
 					  0, 8, SPINOR_OP_READ_1_1_4,
@@ -3320,6 +3353,8 @@ static void spi_nor_no_sfdp_init_params(struct spi_nor *nor)
 	}
 
 	if (no_sfdp_flags & SPI_NOR_OCTAL_READ) {
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - SPI_NOR_OCTAL_READ\n", __func__, __LINE__);
+
 		params->hwcaps.mask |= SNOR_HWCAPS_READ_1_1_8;
 		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_1_8],
 					  0, 8, SPINOR_OP_READ_1_1_8,
@@ -3327,6 +3362,8 @@ static void spi_nor_no_sfdp_init_params(struct spi_nor *nor)
 	}
 
 	if (no_sfdp_flags & SPI_NOR_OCTAL_DTR_READ) {
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - SPI_NOR_OCTAL_DTR_READ\n", __func__, __LINE__);
+
 		params->hwcaps.mask |= SNOR_HWCAPS_READ_8_8_8_DTR;
 		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_8_8_8_DTR],
 					  0, 20, SPINOR_OP_READ_FAST,
@@ -3524,6 +3561,8 @@ static int spi_nor_late_init_params(struct spi_nor *nor)
 			if (params) {
 				memcpy(params, spi_nor_get_params(nor, 0), sizeof(*params));
 				params->size = flash_size[idx];
+
+                dev_err(nor->dev, "[debug] - %s function - [%d] - before spi_nor_set_params\n", __func__, __LINE__);
 				spi_nor_set_params(nor, idx, params);
 			}
 		}
@@ -3672,6 +3711,7 @@ static int spi_nor_init_params(struct spi_nor *nor)
 	if (!params)
 		return -ENOMEM;
 
+    dev_err(nor->dev, "[debug] - %s function %d line - before spi_nor_set_params\n", __func__, __LINE__);
 	spi_nor_set_params(nor, 0, params);
 
 	spi_nor_init_default_params(nor);
@@ -3712,6 +3752,9 @@ static int spi_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 	if (!params->set_octal_dtr)
 		return 0;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - read_proto: %d, write_proto: %d, phy_enable: %d\n",
+            __func__, __LINE__, nor->read_proto, nor->write_proto, params->phy_enable);
+
 	if (!(nor->read_proto == SNOR_PROTO_8_8_8_DTR &&
 	      nor->write_proto == SNOR_PROTO_8_8_8_DTR)) {
 		if (params->phy_enable)
@@ -3733,6 +3776,7 @@ static int spi_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 		 */
 		nor->spimem->spi->cs_index_mask = 1 << idx;
 		ret = params->set_octal_dtr(nor, enable);
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - after params->set_octal_dtr[%d]\n", __func__, __LINE__, ret);
 		if (ret)
 			return ret;
 	}
@@ -3849,12 +3893,14 @@ static int spi_nor_init(struct spi_nor *nor)
 	}
 
 	err = spi_nor_set_octal_dtr(nor, true);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_set_octal_dtr[%d]\n", __func__, __LINE__, err);
 	if (err) {
 		dev_dbg(nor->dev, "octal mode not supported\n");
 		return err;
 	}
 
 	err = spi_nor_quad_enable(nor);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_quad_enable[%d]\n", __func__, __LINE__, err);
 	if (err) {
 		dev_dbg(nor->dev, "quad mode not supported\n");
 		return err;
@@ -3885,6 +3931,7 @@ static int spi_nor_init(struct spi_nor *nor)
 			 */
 			nor->spimem->spi->cs_index_mask = SPI_NOR_ENABLE_MULTI_CS;
 			err = spi_nor_set_4byte_addr_mode(nor, true);
+            dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_set_4byte_addr_mode[%d]\n", __func__, __LINE__, err);
 			if (err)
 				return err;
 		} else {
@@ -3895,11 +3942,15 @@ static int spi_nor_init(struct spi_nor *nor)
 				 */
 				nor->spimem->spi->cs_index_mask = 1 << idx;
 				err = spi_nor_set_4byte_addr_mode(nor, true);
+                dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_set4byte_addr_mode[%d]\n", __func__, __LINE__, err);
 				if (err)
 					return err;
 			}
 		}
 	}
+
+    pr_err("[debug]  - %s - Current proto: read=%d, write=%d\n", __func__,
+       nor->read_proto, nor->write_proto);
 
 	return 0;
 }
@@ -4094,8 +4145,10 @@ static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
 {
 	const struct flash_info *info = NULL;
 
-	if (name)
+    if (name) {
+        dev_err(nor->dev, "[debug] - %s function - before spi_nor_match_name\n", __func__);
 		info = spi_nor_match_name(nor, name);
+    }
 	/*
 	 * Auto-detect if chip name wasn't specified or not found, or the chip
 	 * has an ID. If the chip supposedly has an ID, we also do an
@@ -4104,9 +4157,11 @@ static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
 	if (!info || info->id) {
 		const struct flash_info *jinfo;
 
+        dev_err(nor->dev, "[debug] - %s function - before spi_nor_detect\n", __func__);
 		jinfo = spi_nor_detect(nor);
 		if (IS_ERR(jinfo))
 			return jinfo;
+        dev_err(nor->dev, "[debug] - %s function - after spi_nor_detect\n", __func__);
 
 		/*
 		 * If caller has specified name of flash model that can normally
@@ -4252,14 +4307,19 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	struct device *dev = nor->dev;
 	int ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 	ret = spi_nor_check(nor);
-	if (ret)
+    if (ret) {
+        dev_err(nor->dev, "[debug] - (spi_nor_scan function) - spi_nor_check ret: %d\n", ret);
 		return ret;
+    }
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 
 	/* Reset SPI protocol for all commands. */
 	nor->reg_proto = SNOR_PROTO_1_1_1;
 	nor->read_proto = SNOR_PROTO_1_1_1;
 	nor->write_proto = SNOR_PROTO_1_1_1;
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 
 	/*
 	 * We need the bounce buffer early to read/write registers when going
@@ -4269,32 +4329,40 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	 * shouldn't happen before long since NOR pages are usually less
 	 * than 1KB) after spi_nor_scan() returns.
 	 */
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before bouncebuf\n", __func__, __LINE__);
 	nor->bouncebuf_size = PAGE_SIZE;
 	nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
 				      GFP_KERNEL);
 	if (!nor->bouncebuf)
 		return -ENOMEM;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_hw_reset\n", __func__, __LINE__);
 	ret = spi_nor_hw_reset(nor);
 	if (ret)
 		return ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_get_flash_info - name: %s\n", __func__, __LINE__, name);
 	info = spi_nor_get_flash_info(nor, name);
 	if (IS_ERR(info))
 		return PTR_ERR(info);
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 	nor->info = info;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 	mutex_init(&nor->lock);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_init_params\n", __func__, __LINE__);
 
 	/* Init flash parameters based on flash_info struct and SFDP */
 	ret = spi_nor_init_params(nor);
 	if (ret)
 		return ret;
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 
 	if (spi_nor_use_parallel_locking(nor))
 		init_waitqueue_head(&nor->rww.wait);
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_setup\n", __func__, __LINE__);
 	/*
 	 * Configure the SPI memory:
 	 * - select op codes for (Fast) Read, Page Program and Sector Erase.
@@ -4306,18 +4374,22 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	if (ret)
 		return ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_init\n", __func__, __LINE__);
 	/* Send all the required SPI flash commands to initialize device */
 	ret = spi_nor_init(nor);
 	if (ret)
 		return ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before spi_nor_set_mtd_info\n", __func__, __LINE__);
 	/* No mtd_info fields should be used up to this point. */
 	ret = spi_nor_set_mtd_info(nor);
 	if (ret)
 		return ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 	dev_dbg(dev, "Manufacturer and device ID: %*phN\n",
 		SPI_NOR_MAX_ID_LEN, nor->id);
+
 
 	return 0;
 }
@@ -4405,7 +4477,9 @@ static int spi_nor_probe(struct spi_mem *spimem)
 
 	nor->spimem = spimem;
 	nor->dev = &spi->dev;
-	spi_nor_set_flash_node(nor, spi->dev.of_node);
+    spi_nor_set_flash_node(nor, spi->dev.of_node);
+
+    dev_err(nor->dev, "[debug] - this is spi_nor_probe function\n");
 
 	if (nor->spimem)
 		init_completion(&nor->spimem->request_completion);
@@ -4432,8 +4506,10 @@ static int spi_nor_probe(struct spi_mem *spimem)
 		flash_name = spi->modalias;
 
 	ret = spi_nor_scan(nor, flash_name, &hwcaps);
-	if (ret)
+    if (ret) {
+        dev_err(nor->dev, "[debug] - (spi_nor_probe function) - spi_nor_scan ret: %d\n", ret);
 		return ret;
+    }
 
 	spi_nor_debugfs_register(nor);
 

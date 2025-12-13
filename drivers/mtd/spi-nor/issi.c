@@ -5,6 +5,7 @@
  */
 
 #include <linux/mtd/spi-nor.h>
+#include <linux/delay.h>
 
 #include "core.h"
 
@@ -21,6 +22,8 @@ static int spi_nor_issi_phy_enable(struct spi_nor *nor)
 	struct spi_mem_op op;
 	u8 *buf = nor->bouncebuf;
 	int ret;
+
+    dev_err(nor->dev, "[debug] - (%s)::[%d]\n", __func__, __LINE__);
 
 	ret = spi_nor_write_enable(nor);
 	if (ret)
@@ -68,9 +71,13 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 	u8 *buf = nor->bouncebuf;
 	int ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - nor->reg_proto: %d\n", __func__, __LINE__, nor->reg_proto);
+
+    // enable = false;
 	if (enable) {
 		/* Use 20 dummy cycles for memory array reads. */
 		ret = spi_nor_write_enable(nor);
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_write_enable[%d]\n", __func__, __LINE__, ret);
 		if (ret)
 			return ret;
 
@@ -82,15 +89,18 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 				   SPI_MEM_OP_DATA_OUT(1, buf, 1));
 
 		ret = spi_mem_exec_op(nor->spimem, &op);
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_mem_exec_op[%d]\n", __func__, __LINE__, ret);
 		if (ret)
 			return ret;
 
 		ret = spi_nor_wait_till_ready(nor);
+        dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_wait_till_ready[%d]\n", __func__, __LINE__, ret);
 		if (ret)
 			return ret;
 	}
 
 	ret = spi_nor_write_enable(nor);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_nor_write_enable[%d]\n", __func__, __LINE__, ret);
 	if (ret)
 		return ret;
 
@@ -106,15 +116,20 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 			   SPI_MEM_OP_NO_DUMMY,
 			   SPI_MEM_OP_DATA_OUT(1, buf, 1));
 
-	if (!enable)
+    if (!enable) {
+        dev_err(nor->dev, "[debug] - %s function - use SNOR_PROTO_8_8_8_DTR - before spi_mem_exec_op\n", __func__);
 		spi_nor_spimem_setup_op(nor, &op, SNOR_PROTO_8_8_8_DTR);
+    }
 
 	ret = spi_mem_exec_op(nor->spimem, &op);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_mem_exec_op[%d]\n", __func__, __LINE__, ret);
 	if (ret)
 		return ret;
 
 	if ((nor->flags & SNOR_F_HAS_STACKED) && nor->spimem->spi->cs_index_mask == 1)
 		return 0;
+
+    udelay(30);
 
 	/* Read flash ID to make sure the switch was successful. */
 	op = (struct spi_mem_op)
@@ -124,12 +139,23 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 			   SPI_MEM_OP_DATA_IN(round_up(nor->info->id->len, 2),
 					      buf, 1));
 
-	if (enable)
+    if (enable) {
+        dev_err(nor->dev, "[debug] - %s function - use SNOR_PROTO_8_8_8_DTR - before spi_mem_exec_op(SPINOR_OP_RDID)\n", __func__);
 		spi_nor_spimem_setup_op(nor, &op, SNOR_PROTO_8_8_8_DTR);
+    } else {
+        dev_err(nor->dev, "[debug] - %s function - use SNOR_PROTO_1_1_1_DTR - before spi_mem_exec_op(SPINOR_OP_RDID)\n", __func__);
+        spi_nor_spimem_setup_op(nor, &op, SNOR_PROTO_1_1_1);
+    }
 
 	ret = spi_mem_exec_op(nor->spimem, &op);
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - after spi_mem_exec_op[%d]\n", __func__, __LINE__, ret);
 	if (ret)
 		return ret;
+
+    int i;
+    for (i = 0; i < nor->info->id->len; i++) {
+        dev_err(nor->dev, "[debug] - %s function - buf[%d]=0x%02x, nor id[%d]=0x%02x\n", __func__, i, buf[i], i, nor->info->id->bytes[i]);
+    }
 
     if (memcmp(buf, nor->info->id->bytes, nor->info->id->len)) {
         dev_err(nor->dev, "[debug] - %s function - failed fine here [%d] - after memcmp\n", __func__, __LINE__);
@@ -158,6 +184,8 @@ static void is25wx256_default_init(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = spi_nor_get_params(nor, 0);
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before params operation\n", __func__, __LINE__);
+
 	params->set_octal_dtr = spi_nor_issi_octal_dtr_enable;
 	params->set_4byte_addr_mode = is25wx256_set_4byte_addr_mode;
 	params->phy_enable = spi_nor_issi_phy_enable;
@@ -167,6 +195,7 @@ static int is25wx256_post_sfdp_fixup(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = spi_nor_get_params(nor, 0);
 
+    dev_err(nor->dev, "[debug] - (%s)::[%d] - before params operation\n", __func__, __LINE__);
 	/* Set the Fast Read settings. */
 	params->hwcaps.mask |= SNOR_HWCAPS_READ_8_8_8_DTR;
 	spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_8_8_8_DTR],
