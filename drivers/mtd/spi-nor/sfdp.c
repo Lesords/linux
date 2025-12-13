@@ -671,6 +671,7 @@ static int spi_nor_parse_bfpt(struct spi_nor *nor,
 		return -EOPNOTSUPP;
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_post_bfpt_fixups\n", __func__, __LINE__);
 	return spi_nor_post_bfpt_fixups(nor, bfpt_header, &bfpt);
 }
 
@@ -1577,6 +1578,7 @@ int spi_nor_parse_sfdp(struct spi_nor *nor)
 		}
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_post_sfdp_fixups\n", __func__, __LINE__);
 	err = spi_nor_post_sfdp_fixups(nor);
 exit:
 	kfree(param_headers);

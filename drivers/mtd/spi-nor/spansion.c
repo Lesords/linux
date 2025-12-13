@@ -218,6 +218,8 @@ static int cypress_nor_octal_dtr_en(struct spi_nor *nor)
 	u64 addr;
 	int i, ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+
 	for (i = 0; i < params->n_dice; i++) {
 		addr = params->vreg_offset[i] + SPINOR_REG_CYPRESS_CFR2;
 		ret = cypress_nor_set_memlat(nor, addr);
@@ -372,6 +374,8 @@ static int cypress_nor_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
 {
 	int ret;
 	struct spi_mem_op op = CYPRESS_NOR_EN4B_EX4B_OP(enable);
+
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_spimem_setup_op\n", __func__, __LINE__);
 
 	spi_nor_spimem_setup_op(nor, &op, nor->reg_proto);
 
@@ -700,6 +704,7 @@ static struct spi_nor_fixups s25hx_t_fixups = {
  */
 static int cypress_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 {
+    dev_err(nor->dev, "[debug] - (%s)::%d - enable: %d\n", __func__, __LINE__, enable);
 	return enable ? cypress_nor_octal_dtr_en(nor) :
 			cypress_nor_octal_dtr_dis(nor);
 }
@@ -707,6 +712,8 @@ static int cypress_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 static int s28hx_t_post_sfdp_fixup(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = nor->params;
+
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 
 	if (!params->n_dice || !params->vreg_offset) {
 		dev_err(nor->dev, "%s failed. The volatile register offset could not be retrieved from SFDP.\n",
@@ -753,12 +760,16 @@ static int s28hx_t_post_bfpt_fixup(struct spi_nor *nor,
 	/* Assign 4-byte address mode method that is not determined in BFPT */
 	nor->params->set_4byte_addr_mode = cypress_nor_set_4byte_addr_mode;
 
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+
 	return cypress_nor_set_addr_mode_nbytes(nor);
 }
 
 static int s28hx_t_late_init(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = nor->params;
+
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 
 	params->set_octal_dtr = cypress_nor_set_octal_dtr;
 	params->ready = cypress_nor_sr_ready_and_clear;

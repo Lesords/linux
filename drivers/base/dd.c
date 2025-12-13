@@ -573,6 +573,11 @@ static int call_driver_probe(struct device *dev, const struct device_driver *drv
 {
 	int ret = 0;
 
+ 
+    if (strcmp(dev->driver->name, "spi-nor") == 0) {
+        dev_err(dev, "[debug] - this is call_driver_probe - %s, %s\n", dev->init_name, dev->driver->name);
+    }
+
 	if (dev->bus->probe)
 		ret = dev->bus->probe(dev);
 	else if (drv->probe)

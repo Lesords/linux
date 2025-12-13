@@ -614,6 +614,8 @@ static int cqspi_phy_apply_setting(struct cqspi_flash_pdata *f_pdata,
 	return cqspi_resync_dll(cqspi);
 }
 
+static int debug_cnt = 0;
+
 static int cqspi_phy_check_pattern(struct cqspi_flash_pdata *f_pdata,
 				   struct spi_mem *mem)
 {
@@ -621,6 +623,10 @@ static int cqspi_phy_check_pattern(struct cqspi_flash_pdata *f_pdata,
 	u8 *read_data;
 	unsigned int size = sizeof(phy_tuning_pattern);
 	int ret;
+
+    if (debug_cnt++ < 10) {
+        pr_err("[debug] - (%s)::%d\n", __func__, __LINE__);
+    }
 
 	read_data = kmalloc(size, GFP_KERNEL);
 	if (!read_data)

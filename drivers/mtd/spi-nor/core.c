@@ -43,6 +43,8 @@
 #define SPI_NOR_SRST_SLEEP_MIN 200
 #define SPI_NOR_SRST_SLEEP_MAX 400
 
+int debug_cnt = 0;
+
 /**
  * spi_nor_get_cmd_ext() - Get the command opcode extension based on the
  *			   extension type.
@@ -119,7 +121,7 @@ void spi_nor_spimem_setup_op(const struct spi_nor *nor,
  * spi_nor_spimem_bounce() - check if a bounce buffer is needed for the data
  *                           transfer
  * @nor:        pointer to 'struct spi_nor'
- * @op:         pointer to 'struct spi_mem_op' template for transfer
+ * @op:         pointer to 'struct spi_mem_op' template for trans
  *
  * If we have to use the bounce buffer, the data field in @op will be updated.
  *
@@ -247,6 +249,10 @@ static ssize_t spi_nor_spimem_read_data(struct spi_nor *nor, loff_t from,
 	if (usebouncebuf && nbytes > 0)
 		memcpy(buf, op.data.buf.in, nbytes);
 
+    if (debug_cnt <= 10) {
+        dev_err(nor->dev, "[debug] - (%s)::%d - data.nbytes: %d, ret nbytes: %ld\n", __func__, __LINE__, op.data.nbytes, nbytes);
+    }
+
 	return nbytes;
 }
 
@@ -261,9 +267,16 @@ static ssize_t spi_nor_spimem_read_data(struct spi_nor *nor, loff_t from,
  */
 ssize_t spi_nor_read_data(struct spi_nor *nor, loff_t from, size_t len, u8 *buf)
 {
-	if (nor->spimem)
+    if (nor->spimem) {
+        if (debug_cnt <= 10) {
+            dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_spi_mem_read_data\n", __func__, __LINE__);
+        }
 		return spi_nor_spimem_read_data(nor, from, len, buf);
+    }
 
+    if (debug_cnt <= 10) {
+        dev_err(nor->dev, "[debug] - (%s)::%d - before nor->controller_ops->read()\n", __func__, __LINE__);
+    }
 	return nor->controller_ops->read(nor, from, len, buf);
 }
 
@@ -470,6 +483,8 @@ int spi_nor_read_sr(struct spi_nor *nor, u8 *sr)
 {
 	int ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+
 	if (nor->spimem) {
 		struct spi_mem_op op = SPI_NOR_RDSR_OP(sr);
 
@@ -481,6 +496,8 @@ int spi_nor_read_sr(struct spi_nor *nor, u8 *sr)
 			 * read 2 and then discard the second byte.
 			 */
 			op.data.nbytes = 2;
+            dev_err(nor->dev, "[debug] - (%s)::%d - reg_proto: %d, addr.nbytes: %d, dummy.nbtyes: %d, data.nbytes: %d\n",
+                    __func__, __LINE__, nor->reg_proto, op.addr.nbytes, op.dummy.nbytes, op.data.nbytes);
 		}
 
 		spi_nor_spimem_setup_op(nor, &op, nor->reg_proto);
@@ -2044,10 +2061,16 @@ static const struct flash_info *spi_nor_detect(struct spi_nor *nor)
 
 	/* Fallback to a generic flash described only by its SFDP data. */
 	if (!info) {
+        dev_err(nor->dev, "[debug] - info is null\n");
 		ret = spi_nor_check_sfdp_signature(nor);
-		if (!ret)
+        if (!ret) {
 			info = &spi_nor_generic_flash;
+            dev_err(nor->dev, "[debug] - using nor generic flash\n");
+        }
 	}
+
+    dev_err(nor->dev, "[debug] - JEDEC id bytes: %*ph\n",
+            SPI_NOR_MAX_ID_LEN, id);
 
 	if (!info) {
 		dev_err(nor->dev, "unrecognized JEDEC id bytes: %*ph\n",
@@ -2150,10 +2173,17 @@ static int spi_nor_read(struct mtd_info *mtd, loff_t from, size_t len,
 	while (len) {
 		loff_t addr = from;
 
-		if (nor->read_proto == SNOR_PROTO_8_8_8_DTR)
-			ret = spi_nor_octal_dtr_read(nor, addr, len, buf);
-		else
+        if (nor->read_proto == SNOR_PROTO_8_8_8_DTR) {
+            if (++debug_cnt <= 10) {
+                dev_err(nor->dev, "[debug] - (%s)::%d - this is SNOR_PROTO_8_8_8_DTR - before spi_nor_octal_dtr_read\n", __func__, __LINE__);
+            }
+            ret = spi_nor_octal_dtr_read(nor, addr, len, buf);
+        } else {
+            if (++debug_cnt <= 10) {
+                dev_err(nor->dev, "[debug] - (%s)::%d - not SNOR_PROTO_8_8_8_DTR - before spi_nor_read_data\n", __func__, __LINE__);
+            }
 			ret = spi_nor_read_data(nor, addr, len, buf);
+        }
 
 		if (ret == 0) {
 			/* We shouldn't see 0-length reads */
@@ -2484,9 +2514,13 @@ spi_nor_spimem_adjust_hwcaps(struct spi_nor *nor, u32 *hwcaps)
 	struct spi_nor_flash_parameter *params = nor->params;
 	unsigned int cap;
 
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - (%s)::%d - before mask - hwcaps: %d\n", __func__, __LINE__, *hwcaps);
+
 	/* X-X-X modes are not supported yet, mask them all. */
 	*hwcaps &= ~SNOR_HWCAPS_X_X_X;
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - hwcaps: %d\n", __func__, __LINE__, *hwcaps);
 	/*
 	 * If the reset line is broken, we do not want to enter a stateful
 	 * mode.
@@ -2502,17 +2536,27 @@ spi_nor_spimem_adjust_hwcaps(struct spi_nor *nor, u32 *hwcaps)
 
 		rdidx = spi_nor_hwcaps_read2cmd(BIT(cap));
 		if (rdidx >= 0 &&
-		    spi_nor_spimem_check_readop(nor, &params->reads[rdidx]))
+            spi_nor_spimem_check_readop(nor, &params->reads[rdidx])) {
 			*hwcaps &= ~BIT(cap);
+            dev_err(nor->dev, "[debug] - (%s)::%d - ppidx: %d, hwcaps: %d\n", __func__, __LINE__, ppidx, *hwcaps);
+        }
+
+        dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 
 		ppidx = spi_nor_hwcaps_pp2cmd(BIT(cap));
 		if (ppidx < 0)
 			continue;
 
+        dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 		if (spi_nor_spimem_check_pp(nor,
-					    &params->page_programs[ppidx]))
+                                    &params->page_programs[ppidx])) {
+
+            dev_err(nor->dev, "[debug] - (%s)::%d - ppidx: %d, hwcaps: %d\n", __func__, __LINE__, ppidx, *hwcaps);
 			*hwcaps &= ~BIT(cap);
+        }
 	}
+
+    dev_err(nor->dev, "[debug] - (%s)::%d - hwcaps: %d\n", __func__, __LINE__, *hwcaps);
 }
 
 /**
@@ -2605,6 +2649,9 @@ static int spi_nor_select_read(struct spi_nor *nor,
 	 * into the so called dummy clock cycles.
 	 */
 	nor->read_dummy = read->num_mode_clocks + read->num_wait_states;
+
+    dev_err(nor->dev, "[debug] - (%s)::%d - nor->read_opcode: %d, nor->read_proto: %d, nor->read_dummy: %d\n",
+            __func__, __LINE__, nor->read_opcode, nor->read_proto, nor->read_dummy);
 	return 0;
 }
 
@@ -2728,6 +2775,8 @@ static int spi_nor_select_erase(struct spi_nor *nor)
 
 static int spi_nor_set_addr_nbytes(struct spi_nor *nor)
 {
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+
 	if (nor->params->addr_nbytes) {
 		nor->addr_nbytes = nor->params->addr_nbytes;
 	} else if (nor->read_proto == SNOR_PROTO_8_8_8_DTR) {
@@ -2755,6 +2804,8 @@ static int spi_nor_set_addr_nbytes(struct spi_nor *nor)
 		nor->addr_nbytes = 4;
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - addr_nbytes: %d\n", __func__, __LINE__, nor->addr_nbytes);
+
 	if (nor->addr_nbytes > SPI_NOR_MAX_ADDR_NBYTES) {
 		dev_dbg(nor->dev, "The number of address bytes is too large: %u\n",
 			nor->addr_nbytes);
@@ -2763,8 +2814,10 @@ static int spi_nor_set_addr_nbytes(struct spi_nor *nor)
 
 	/* Set 4byte opcodes when possible. */
 	if (nor->addr_nbytes == 4 && nor->flags & SNOR_F_4B_OPCODES &&
-	    !(nor->flags & SNOR_F_HAS_4BAIT))
+        !(nor->flags & SNOR_F_HAS_4BAIT)) {
+        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_set_4byte_opcodes\n", __func__, __LINE__);
 		spi_nor_set_4byte_opcodes(nor);
+    }
 
 	return 0;
 }
@@ -2783,6 +2836,7 @@ static int spi_nor_setup(struct spi_nor *nor,
 	shared_mask = hwcaps->mask & params->hwcaps.mask;
 
 	if (nor->spimem) {
+        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_spimem_adjust_hwcaps\n", __func__, __LINE__);
 		/*
 		 * When called from spi_nor_probe(), all caps are set and we
 		 * need to discard some of them based on what the SPI
@@ -2803,6 +2857,7 @@ static int spi_nor_setup(struct spi_nor *nor,
 		}
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_select_read\n", __func__, __LINE__);
 	/* Select the (Fast) Read command. */
 	err = spi_nor_select_read(nor, shared_mask);
 	if (err) {
@@ -2811,6 +2866,7 @@ static int spi_nor_setup(struct spi_nor *nor,
 		return err;
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_select_pp\n", __func__, __LINE__);
 	/* Select the Page Program command. */
 	err = spi_nor_select_pp(nor, shared_mask);
 	if (err) {
@@ -2819,6 +2875,7 @@ static int spi_nor_setup(struct spi_nor *nor,
 		return err;
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_select_erase\n", __func__, __LINE__);
 	/* Select the Sector Erase command. */
 	err = spi_nor_select_erase(nor);
 	if (err) {
@@ -2827,6 +2884,7 @@ static int spi_nor_setup(struct spi_nor *nor,
 		return err;
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_set_addr_nbytes\n", __func__, __LINE__);
 	return spi_nor_set_addr_nbytes(nor);
 }
 
@@ -3169,17 +3227,22 @@ static int spi_nor_init_params(struct spi_nor *nor)
 	spi_nor_init_default_params(nor);
 
 	if (spi_nor_needs_sfdp(nor)) {
+        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_parse_sfdp\n", __func__, __LINE__);
 		ret = spi_nor_parse_sfdp(nor);
 		if (ret) {
 			dev_err(nor->dev, "BFPT parsing failed. Please consider using SPI_NOR_SKIP_SFDP when declaring the flash\n");
 			return ret;
 		}
 	} else if (nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP) {
+        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_parse_sfdp\n", __func__, __LINE__);
+		ret = spi_nor_parse_sfdp(nor);
 		spi_nor_no_sfdp_init_params(nor);
 	} else {
+        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_init_params_deprecated\n", __func__, __LINE__);
 		spi_nor_init_params_deprecated(nor);
 	}
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_late_init_params\n", __func__, __LINE__);
 	ret = spi_nor_late_init_params(nor);
 	if (ret)
 		return ret;
@@ -3200,8 +3263,15 @@ static int spi_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 {
 	int ret;
 
+    dev_err(nor->dev, "[debug] - (%s)::%d - read_proto: %d, write_proto: %d\n",
+            __func__, __LINE__, nor->read_proto, nor->write_proto);
+    dev_err(nor->dev, "[debug] - (%s)::%d - SNOR_PROTO_8_8_8_DTR: %d, SNOR_PROTO_1_1_1: %d\n",
+            __func__, __LINE__, SNOR_PROTO_8_8_8_DTR,  SNOR_PROTO_1_1_1);
+
 	if (!nor->params->set_octal_dtr)
 		return 0;
+
+    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 
 	if (!(nor->read_proto == SNOR_PROTO_8_8_8_DTR &&
 	      nor->write_proto == SNOR_PROTO_8_8_8_DTR))
@@ -3282,6 +3352,8 @@ int spi_nor_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
 static int spi_nor_init(struct spi_nor *nor)
 {
 	int err;
+
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_set_octal_dtr\n", __func__, __LINE__);
 
 	err = spi_nor_set_octal_dtr(nor, true);
 	if (err) {
@@ -3638,6 +3710,8 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	if (ret)
 		return ret;
 
+    dev_err(dev, "[debug] - (%s)::%d - before spi_nor_get_flash_info - name: %s\n",
+            __func__, __LINE__, name ? name : "null");
 	info = spi_nor_get_flash_info(nor, name);
 	if (IS_ERR(info))
 		return PTR_ERR(info);
@@ -3646,6 +3720,7 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 
 	mutex_init(&nor->lock);
 
+    dev_err(dev, "[debug] - (%s)::%d - before spi_nor_init_params\n", __func__, __LINE__);
 	/* Init flash parameters based on flash_info struct and SFDP */
 	ret = spi_nor_init_params(nor);
 	if (ret)
@@ -3654,6 +3729,7 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	if (spi_nor_use_parallel_locking(nor))
 		init_waitqueue_head(&nor->rww.wait);
 
+    dev_err(dev, "[debug] - (%s)::%d - before spi_nor_setup\n", __func__, __LINE__);
 	/*
 	 * Configure the SPI memory:
 	 * - select op codes for (Fast) Read, Page Program and Sector Erase.
@@ -3664,6 +3740,8 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	ret = spi_nor_setup(nor, hwcaps);
 	if (ret)
 		return ret;
+
+    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_init\n", __func__, __LINE__);
 
 	/* Send all the required SPI flash commands to initialize device */
 	ret = spi_nor_init(nor);
