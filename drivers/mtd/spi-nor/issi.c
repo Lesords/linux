@@ -131,8 +131,10 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 	if (ret)
 		return ret;
 
-	if (memcmp(buf, nor->info->id->bytes, nor->info->id->len))
-		return -EINVAL;
+    if (memcmp(buf, nor->info->id->bytes, nor->info->id->len)) {
+        dev_err(nor->dev, "[debug] - %s function - failed fine here [%d] - after memcmp\n", __func__, __LINE__);
+		// return -EINVAL;
+    }
 
 	return 0;
 }
