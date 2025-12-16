@@ -13,7 +13,8 @@
 #define SPINOR_OP_IS_WR_ANY_REG	0x81	/* Write volatile register */
 #define SPINOR_REG_IS_CFR0V	0x00	/* For setting octal DTR mode */
 #define SPINOR_REG_IS_CFR1V	0x01	/* For setting dummy cycles */
-#define SPINOR_IS_OCT_DTR	0xe7	/* Enable Octal DTR. */
+// #define SPINOR_IS_OCT_DTR	0xe7	/* Enable Octal DTR. */
+#define SPINOR_IS_OCT_DTR	0xc7	/* Enable Octal DTR. */
 #define SPINOR_IS_EXSPI		0xff	/* Enable Extended SPI (default) */
 
 static int spi_nor_issi_phy_enable(struct spi_nor *nor)
@@ -66,7 +67,36 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 {
 	struct spi_mem_op op;
 	u8 *buf = nor->bouncebuf;
-	int ret;
+    int ret;
+
+	{
+        // [debug] - read back CFR0V register before modify
+        struct spi_mem_op rd_op = SPI_MEM_OP(
+            SPI_MEM_OP_CMD(SPINOR_OP_IS_RD_ANY_REG, 1), // 读寄存器命令
+            SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR0V, 1), // 地址
+            SPI_MEM_OP_NO_DUMMY,       // DTR 读寄存器通常需要 Dummy，具体看手册，这里假设 20
+            SPI_MEM_OP_DATA_IN(1, buf, 1)
+        );
+
+        ret = spi_mem_exec_op(nor->spimem, &rd_op);
+        if (ret)
+            dev_err(nor->dev, "[debug] - (%s)::%d - before modify - Failed to read CFR0V register: %d\n", __func__, __LINE__, ret);
+        else
+            dev_info(nor->dev, "[debug] - (%s)::%d - before modify - Initial CFR0V register value: 0x%02x\n", __func__, __LINE__, buf[0]);
+
+        struct spi_mem_op rd_op_ = SPI_MEM_OP(
+            SPI_MEM_OP_CMD(SPINOR_OP_IS_RD_ANY_REG, 1), // 读寄存器命令
+            SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR1V, 1), // 地址
+            SPI_MEM_OP_NO_DUMMY,       // DTR 读寄存器通常需要 Dummy，具体看手册，这里假设 20
+            SPI_MEM_OP_DATA_IN(1, buf, 1)
+        );
+
+        ret = spi_mem_exec_op(nor->spimem, &rd_op_);
+        if (ret)
+            dev_err(nor->dev, "[debug] - (%s)::%d - after modify - Failed to read CFR1V register: %d\n", __func__, __LINE__, ret);
+        else
+            dev_info(nor->dev, "[debug] - (%s)::%d - after modify - Initial CFR1V register value: 0x%02x\n", __func__, __LINE__, buf[0]);
+    }
 
 	if (enable) {
 		/* Use 20 dummy cycles for memory array reads. */
@@ -77,7 +107,7 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 		*buf = 20;
 		op = (struct spi_mem_op)
 			SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_IS_WR_ANY_REG, 1),
-				   SPI_MEM_OP_ADDR(3, SPINOR_REG_IS_CFR1V, 1),
+				   SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR1V, 1),
 				   SPI_MEM_OP_NO_DUMMY,
 				   SPI_MEM_OP_DATA_OUT(1, buf, 1));
 
@@ -99,9 +129,10 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 	else
 		*buf = SPINOR_IS_EXSPI;
 
+	dev_err(nor->dev, "[debug] - (%s)::%d - before CFROV addr_width:[%d]\n", __func__, __LINE__, nor->addr_nbytes);
 	op = (struct spi_mem_op)
 		SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_IS_WR_ANY_REG, 1),
-			   SPI_MEM_OP_ADDR(enable ? 3 : 4,
+			   SPI_MEM_OP_ADDR(4,
 					   SPINOR_REG_IS_CFR0V, 1),
 			   SPI_MEM_OP_NO_DUMMY,
 			   SPI_MEM_OP_DATA_OUT(1, buf, 1));
@@ -120,9 +151,11 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 	op = (struct spi_mem_op)
 		SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RDID, 1),
 			   SPI_MEM_OP_NO_ADDR,
-			   SPI_MEM_OP_DUMMY(enable ? 8 : 0, 1),
+			   SPI_MEM_OP_NO_DUMMY,
 			   SPI_MEM_OP_DATA_IN(round_up(nor->info->id->len, 2),
 					      buf, 1));
+
+			   // SPI_MEM_OP_DUMMY(enable ? 20 : 0, 1),
 
 	if (enable)
 		spi_nor_spimem_setup_op(nor, &op, SNOR_PROTO_8_8_8_DTR);
@@ -130,6 +163,44 @@ static int spi_nor_issi_octal_dtr_enable(struct spi_nor *nor, bool enable)
 	ret = spi_mem_exec_op(nor->spimem, &op);
 	if (ret)
 		return ret;
+
+	{
+        // [debug] - read back CFR0V register before modify
+        struct spi_mem_op rd_op = SPI_MEM_OP(
+            SPI_MEM_OP_CMD(SPINOR_OP_IS_RD_ANY_REG, 1), // 读寄存器命令
+            SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR0V, 1), // 地址
+            SPI_MEM_OP_NO_DUMMY,       // DTR 读寄存器通常需要 Dummy，具体看手册，这里假设 20
+            SPI_MEM_OP_DATA_IN(1, buf, 1)
+        );
+
+		spi_nor_spimem_setup_op(nor, &rd_op, SNOR_PROTO_8_8_8_DTR);
+
+        ret = spi_mem_exec_op(nor->spimem, &rd_op);
+        if (ret)
+            dev_err(nor->dev, "[debug] - (%s)::%d - after modify - Failed to read CFR0V register: %d\n", __func__, __LINE__, ret);
+        else
+            dev_info(nor->dev, "[debug] - (%s)::%d - after modify - Initial CFR0V register value: 0x%02x\n", __func__, __LINE__, buf[0]);
+
+        struct spi_mem_op rd_op_ = SPI_MEM_OP(
+            SPI_MEM_OP_CMD(SPINOR_OP_IS_RD_ANY_REG, 1), // 读寄存器命令
+            SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR1V, 1), // 地址
+            SPI_MEM_OP_NO_DUMMY,       // DTR 读寄存器通常需要 Dummy，具体看手册，这里假设 20
+            SPI_MEM_OP_DATA_IN(1, buf, 1)
+        );
+
+		spi_nor_spimem_setup_op(nor, &rd_op_, SNOR_PROTO_8_8_8_DTR);
+
+        ret = spi_mem_exec_op(nor->spimem, &rd_op_);
+        if (ret)
+            dev_err(nor->dev, "[debug] - (%s)::%d - after modify - Failed to read CFR1V register: %d\n", __func__, __LINE__, ret);
+        else
+            dev_info(nor->dev, "[debug] - (%s)::%d - after modify - Initial CFR1V register value: 0x%02x\n", __func__, __LINE__, buf[0]);
+    }
+
+    int i;
+    for (i = 0; i < nor->info->id->len; i++) {
+        dev_err(nor->dev, "[debug] - %s function - buf[%d]=0x%02x, nor id[%d]=0x%02x\n", __func__, i, buf[i], i, nor->info->id->bytes[i]);
+    }
 
     if (memcmp(buf, nor->info->id->bytes, nor->info->id->len)) {
         dev_err(nor->dev, "[debug] - %s function - failed fine here [%d] - after memcmp\n", __func__, __LINE__);
@@ -157,6 +228,59 @@ static int is25wx256_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
 static void is25wx256_default_init(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = spi_nor_get_params(nor, 0);
+	int ret;
+
+	struct spi_mem_op rd_op = SPI_MEM_OP(
+		SPI_MEM_OP_CMD(SPINOR_OP_IS_RD_ANY_REG, 1),
+		SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR0V, 1),
+		SPI_MEM_OP_NO_DUMMY,
+		SPI_MEM_OP_DATA_IN(1, nor->bouncebuf, 1)
+	);
+
+	spi_nor_spimem_setup_op(nor, &rd_op, SNOR_PROTO_1_1_1);
+
+	ret = spi_mem_exec_op(nor->spimem, &rd_op);
+	if (ret)
+		dev_err(nor->dev, "[debug] - (%s)::%d - Failed to read CFR0V register: %d\n", __func__, __LINE__, ret);
+	else
+		dev_info(nor->dev, "[debug] - (%s)::%d - Initial CFR0V register value: 0x%02x\n", __func__, __LINE__, nor->bouncebuf[0]);
+
+    {
+        struct spi_mem_op rd_op_ = SPI_MEM_OP(
+            SPI_MEM_OP_CMD(SPINOR_OP_IS_RD_ANY_REG, 1), // 读寄存器命令
+            SPI_MEM_OP_ADDR(4, SPINOR_REG_IS_CFR1V, 1), // 地址
+            SPI_MEM_OP_NO_DUMMY,       // DTR 读寄存器通常需要 Dummy，具体看手册，这里假设 20
+            SPI_MEM_OP_DATA_IN(1, nor->bouncebuf, 1)
+        );
+
+        ret = spi_mem_exec_op(nor->spimem, &rd_op_);
+        if (ret)
+            dev_err(nor->dev, "[debug] - (%s)::%d - after modify - Failed to read CFR1V register: %d\n", __func__, __LINE__, ret);
+        else
+            dev_info(nor->dev, "[debug] - (%s)::%d - after modify - Initial CFR1V register value: 0x%02x\n", __func__, __LINE__, nor->bouncebuf[0]);
+
+        /* Read flash ID to make sure the switch was successful. */
+        struct spi_mem_op op;
+        op = (struct spi_mem_op)
+            SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RDID, 1),
+                       SPI_MEM_OP_NO_ADDR,
+                       SPI_MEM_OP_NO_DUMMY,
+                       SPI_MEM_OP_DATA_IN(round_up(nor->info->id->len, 2),
+                                          nor->bouncebuf, 1));
+
+        // SPI_MEM_OP_DUMMY(enable ? 20 : 0, 1),
+
+            spi_nor_spimem_setup_op(nor, &op, SNOR_PROTO_8_8_8_DTR);
+
+        ret = spi_mem_exec_op(nor->spimem, &op);
+        if (ret)
+            return ;
+
+        int i;
+        for (i = 0; i < nor->info->id->len; i++) {
+            dev_err(nor->dev, "[debug] - %s function - buf[%d]=0x%02x, nor id[%d]=0x%02x\n", __func__, i, nor->bouncebuf[i], i, nor->info->id->bytes[i]);
+        }
+    }
 
 	params->set_octal_dtr = spi_nor_issi_octal_dtr_enable;
 	params->set_4byte_addr_mode = is25wx256_set_4byte_addr_mode;
@@ -176,6 +300,8 @@ static int is25wx256_post_sfdp_fixup(struct spi_nor *nor)
 	nor->cmd_ext_type = SPI_NOR_EXT_REPEAT;
 	params->rdsr_dummy = 8;
 	params->rdsr_addr_nbytes = 0;
+
+	dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 
 	/*
 	 * The BFPT quad enable field is set to a reserved value so the quad

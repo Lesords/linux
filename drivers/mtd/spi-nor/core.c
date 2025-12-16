@@ -3709,8 +3709,13 @@ static int spi_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 	struct spi_nor_flash_parameter *params = spi_nor_get_params(nor, 0);
 	int ret, idx, num_flash = 1;
 
+	dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+
 	if (!params->set_octal_dtr)
 		return 0;
+
+	dev_dbg(nor->dev, "[debug] - %s read_proto: %d, write_proto: %d, SNOR_PROTO_8_8_8_DTR: %d\n",
+		__func__, nor->read_proto, nor->write_proto, SNOR_PROTO_8_8_8_DTR);
 
 	if (!(nor->read_proto == SNOR_PROTO_8_8_8_DTR &&
 	      nor->write_proto == SNOR_PROTO_8_8_8_DTR)) {
@@ -3848,6 +3853,8 @@ static int spi_nor_init(struct spi_nor *nor)
 		spi_nor_write_sr(nor, nor->bouncebuf, 1);
 	}
 
+	dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+
 	err = spi_nor_set_octal_dtr(nor, true);
 	if (err) {
 		dev_dbg(nor->dev, "octal mode not supported\n");
@@ -3984,6 +3991,8 @@ static void spi_nor_resume(struct mtd_info *mtd)
 		if (ret)
 			dev_err(nor->dev, "Failed to enter 4-byte address mode, err = %d\n", ret);
 	}
+
+	dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
 
 	/* re-initialize the nor chip */
 	ret = spi_nor_init(nor);
