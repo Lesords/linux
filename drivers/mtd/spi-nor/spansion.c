@@ -211,6 +211,41 @@ static int cypress_nor_set_octal_dtr_bits(struct spi_nor *nor, u64 addr)
 	return spi_nor_write_any_volatile_reg(nor, &op, nor->reg_proto);
 }
 
+static void debug_check_cypress_registers(struct spi_nor *nor) {
+    struct spi_nor_flash_parameter *params = nor->params;
+    u8 *buf = nor->bouncebuf;
+    u64 addr;
+    int ret;
+
+    // Check CFR2 register
+    addr = params->vreg_offset[0] + SPINOR_REG_CYPRESS_CFR2;
+    struct spi_mem_op op = (struct spi_mem_op)
+        SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RD_ANY_REG, 0),
+                   SPI_MEM_OP_ADDR(params->addr_mode_nbytes, addr, 1),
+                   SPI_MEM_OP_NO_DUMMY,
+                   SPI_MEM_OP_DATA_IN(1, buf, 1));
+    ret = spi_nor_read_any_reg(nor, &op, nor->reg_proto);
+    if (ret) {
+        dev_err(nor->dev, "[debug] - Failed to read CFR2 register: %d\n", ret);
+    } else {
+        dev_info(nor->dev, "[debug] - CFR2 register value: 0x%02x\n", buf[0]);
+    }
+
+    // Check CFR5 register
+    addr = params->vreg_offset[0] + SPINOR_REG_CYPRESS_CFR5;
+    op = (struct spi_mem_op)
+        SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RD_ANY_REG, 0),
+                   SPI_MEM_OP_ADDR(params->addr_mode_nbytes, addr, 1),
+                   SPI_MEM_OP_NO_DUMMY,
+                   SPI_MEM_OP_DATA_IN(1, buf, 1));
+    ret = spi_nor_read_any_reg(nor, &op, nor->reg_proto);
+    if (ret) {
+        dev_err(nor->dev, "[debug] - Failed to read CFR5 register: %d\n", ret);
+    } else {
+        dev_info(nor->dev, "[debug] - CFR5 register value: 0x%02x\n", buf[0]);
+    }
+}
+
 static int cypress_nor_octal_dtr_en(struct spi_nor *nor)
 {
 	const struct spi_nor_flash_parameter *params = nor->params;
@@ -218,7 +253,8 @@ static int cypress_nor_octal_dtr_en(struct spi_nor *nor)
 	u64 addr;
 	int i, ret;
 
-    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - spansion.c - (%s)::%d\n", __func__, __LINE__);
+	debug_check_cypress_registers(nor);
 
 	for (i = 0; i < params->n_dice; i++) {
 		addr = params->vreg_offset[i] + SPINOR_REG_CYPRESS_CFR2;
@@ -242,8 +278,16 @@ static int cypress_nor_octal_dtr_en(struct spi_nor *nor)
 		return ret;
 	}
 
+    for (i = 0; i < nor->info->id->len; i++) {
+        dev_err(nor->dev, "[debug] - Read ID byte %d: 0x%02x, Expected: 0x%02x\n",
+                i, buf[i], nor->info->id->bytes[i]);
+    }
+
 	if (memcmp(buf, nor->info->id->bytes, nor->info->id->len))
 		return -EINVAL;
+
+	// Debug: Check registers after enabling 8D-8D-8D mode
+	debug_check_cypress_registers(nor);
 
 	return 0;
 }
@@ -375,7 +419,7 @@ static int cypress_nor_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
 	int ret;
 	struct spi_mem_op op = CYPRESS_NOR_EN4B_EX4B_OP(enable);
 
-    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_spimem_setup_op\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - spansion.c - (%s)::%d - before spi_nor_spimem_setup_op\n", __func__, __LINE__);
 
 	spi_nor_spimem_setup_op(nor, &op, nor->reg_proto);
 
@@ -704,7 +748,7 @@ static struct spi_nor_fixups s25hx_t_fixups = {
  */
 static int cypress_nor_set_octal_dtr(struct spi_nor *nor, bool enable)
 {
-    dev_err(nor->dev, "[debug] - (%s)::%d - enable: %d\n", __func__, __LINE__, enable);
+    dev_err(nor->dev, "[debug] - spansion.c - (%s)::%d - enable: %d\n", __func__, __LINE__, enable);
 	return enable ? cypress_nor_octal_dtr_en(nor) :
 			cypress_nor_octal_dtr_dis(nor);
 }
@@ -713,7 +757,7 @@ static int s28hx_t_post_sfdp_fixup(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = nor->params;
 
-    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - spansion.c - (%s)::%d\n", __func__, __LINE__);
 
 	if (!params->n_dice || !params->vreg_offset) {
 		dev_err(nor->dev, "%s failed. The volatile register offset could not be retrieved from SFDP.\n",
@@ -760,7 +804,7 @@ static int s28hx_t_post_bfpt_fixup(struct spi_nor *nor,
 	/* Assign 4-byte address mode method that is not determined in BFPT */
 	nor->params->set_4byte_addr_mode = cypress_nor_set_4byte_addr_mode;
 
-    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - spansion.c - (%s)::%d\n", __func__, __LINE__);
 
 	return cypress_nor_set_addr_mode_nbytes(nor);
 }
@@ -769,7 +813,7 @@ static int s28hx_t_late_init(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter *params = nor->params;
 
-    dev_err(nor->dev, "[debug] - (%s)::%d\n", __func__, __LINE__);
+    dev_err(nor->dev, "[debug] - spansion.c - (%s)::%d\n", __func__, __LINE__);
 
 	params->set_octal_dtr = cypress_nor_set_octal_dtr;
 	params->ready = cypress_nor_sr_ready_and_clear;

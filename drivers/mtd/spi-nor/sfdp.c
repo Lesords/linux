@@ -1532,6 +1532,7 @@ int spi_nor_parse_sfdp(struct spi_nor *nor)
 			bfpt_header = param_header;
 	}
 
+    dev_err(dev, "[debug] - (%s)::%d - before spi_nor_parse_bfpt\n", __func__, __LINE__);
 	err = spi_nor_parse_bfpt(nor, bfpt_header);
 	if (err)
 		goto exit;

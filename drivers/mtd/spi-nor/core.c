@@ -3227,23 +3227,24 @@ static int spi_nor_init_params(struct spi_nor *nor)
 	spi_nor_init_default_params(nor);
 
 	if (spi_nor_needs_sfdp(nor)) {
-        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_parse_sfdp\n", __func__, __LINE__);
 		ret = spi_nor_parse_sfdp(nor);
+        // WORK
+        dev_err(nor->dev, "[debug] - (%s)::%d - after spi_nor_parse_sfdp - ret: %d\n", __func__, __LINE__, ret);
 		if (ret) {
 			dev_err(nor->dev, "BFPT parsing failed. Please consider using SPI_NOR_SKIP_SFDP when declaring the flash\n");
 			return ret;
 		}
 	} else if (nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP) {
-        dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_parse_sfdp\n", __func__, __LINE__);
 		ret = spi_nor_parse_sfdp(nor);
+        dev_err(nor->dev, "[debug] - (%s)::%d - after spi_nor_parse_sfdp - ret: %d\n", __func__, __LINE__, ret);
 		spi_nor_no_sfdp_init_params(nor);
 	} else {
         dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_init_params_deprecated\n", __func__, __LINE__);
 		spi_nor_init_params_deprecated(nor);
 	}
 
-    dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_late_init_params\n", __func__, __LINE__);
 	ret = spi_nor_late_init_params(nor);
+    dev_err(nor->dev, "[debug] - (%s)::%d - after spi_nor_late_init_params - ret: %d\n", __func__, __LINE__, ret);
 	if (ret)
 		return ret;
 
@@ -3683,6 +3684,7 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	struct device *dev = nor->dev;
 	int ret;
 
+    // [debug] - only check value
 	ret = spi_nor_check(nor);
 	if (ret)
 		return ret;
@@ -3720,6 +3722,7 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 
 	mutex_init(&nor->lock);
 
+    // [debug] - set bfpt
     dev_err(dev, "[debug] - (%s)::%d - before spi_nor_init_params\n", __func__, __LINE__);
 	/* Init flash parameters based on flash_info struct and SFDP */
 	ret = spi_nor_init_params(nor);
@@ -3743,6 +3746,7 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 
     dev_err(nor->dev, "[debug] - (%s)::%d - before spi_nor_init\n", __func__, __LINE__);
 
+    // [debug] - set octal dir
 	/* Send all the required SPI flash commands to initialize device */
 	ret = spi_nor_init(nor);
 	if (ret)
